@@ -106,6 +106,9 @@ export default {
             sub.setName('clear').setDescription('Clear the queue'),
         )
         .addSubcommand((sub) =>
+            sub.setName('emojis').setDescription('Show custom emojis available to this bot application'),
+        )
+        .addSubcommand((sub) =>
             sub.setName('leave').setDescription('Disconnect the bot from the voice channel'),
         )
         .addSubcommand((sub) =>
@@ -190,6 +193,18 @@ export default {
             case 'clear': {
                 const embed = await clearQueue(client, interaction);
                 await replyMusicSuccess(interaction, embed);
+                break;
+            }
+            case 'emojis': {
+                const emojis = client.musicApplicationEmojiList || [];
+                const inventory = emojis.slice(0, 15).map((emoji) =>
+                    `${emoji.animated ? '<a:' : '<:'}${emoji.name}:${emoji.id}> \`${emoji.name}\``,
+                ).join('\n');
+                const more = emojis.length > 15 ? `\n…and ${emojis.length - 15} more.` : '';
+                await InteractionHelper.safeEditReply(interaction, {
+                    content: `This bot application has **${emojis.length} custom emoji(s)** available.\n${inventory || 'No application emojis are available yet.'}${more}`,
+                    allowedMentions: { parse: [] },
+                });
                 break;
             }
             case 'leave': {

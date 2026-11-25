@@ -51,7 +51,7 @@ export async function refreshPlayerMessage(client, guildId) {
         }
 
         const guildData = getGuildMusicData(guildId);
-        const embed = buildNowPlayingEmbed(player.current, player, guildData);
+        const embed = buildNowPlayingEmbed(player.current, player, guildData, client);
         const components = buildPlayerButtonRows(client, player, guildData);
         const channelId = guildData.playerChannelId || player.textChannel;
         await editOrSendPlayerMessage(client, guildData, channelId, embed, components);
@@ -144,7 +144,7 @@ export function setupPlayerHandler(client) {
                 guildData.idleTimeout = null;
             }
 
-            const embed = buildNowPlayingEmbed(track, player, guildData);
+            const embed = buildNowPlayingEmbed(track, player, guildData, client);
             const components = buildPlayerButtonRows(client, player, guildData);
             const channelId = guildData.playerChannelId || player.textChannel;
             await editOrSendPlayerMessage(client, guildData, channelId, embed, components);

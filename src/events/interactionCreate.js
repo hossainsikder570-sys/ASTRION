@@ -1,4 +1,6 @@
-import { Events, MessageFlags } from 'discord.js';
+import { Events, MessageFlags, PermissionsBitField } from 'discord.js';
+import lavalinkConfig, { updateLavalinkSettings } from '../config/music/lavalink.js';
+import { reconnectMusic } from '../services/music/riffySetup.js';
 import { getPlayer, setVolume } from '../services/music/musicActions.js';
 import { canControlMusic } from '../services/music/permissions.js';
 import { handleInteractionError, replyUserError, ErrorTypes } from '../utils/errorHandler.js';
@@ -81,6 +83,44 @@ export default {
         await button.execute(interaction, client);
       } catch (error) {
         await handleInteractionError(interaction, error, { type: 'button' });
+      }
+      return;
+    }
+
+    if (interaction.isModalSubmit() && interaction.customId === 'lavalink_edit_settings') {
+      try {
+        const permissions = interaction.memberPermissions;
+        if (!permissions?.has(PermissionsBitField.Flags.ManageGuild) &&
+            !permissions?.has(PermissionsBitField.Flags.Administrator)) {
+          return replyUserError(interaction, {
+            type: ErrorTypes.PERMISSION,
+            message: 'Manage Server permission is required to change Lavalink settings.',
+          });
+        }
+
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const enteredPassword = interaction.fields.getTextInputValue('password');
+        const requestedPassword = enteredPassword.trim() ? enteredPassword : '';
+        const currentPassword = lavalinkConfig.nodes[0]?.password;
+        const password = requestedPassword || currentPassword;
+        if (!password) throw new Error('A Lavalink password is required before connecting.');
+        const secure = interaction.fields.getTextInputValue('secure').trim().toLowerCase();
+        if (!['true', 'false'].includes(secure)) throw new Error('Secure must be true or false.');
+
+        updateLavalinkSettings({
+          host: interaction.fields.getTextInputValue('host').trim(),
+          port: interaction.fields.getTextInputValue('port').trim(),
+          password,
+          secure: secure === 'true',
+        });
+        const reconnected = await reconnectMusic(client);
+        await interaction.editReply({
+          content: reconnected
+            ? 'Lavalink settings saved privately and a connection attempt was started. Check bot logs for the node connection result.'
+            : 'Settings were saved privately, but the Lavalink client could not initialize. Verify the server is reachable and compatible.',
+        });
+      } catch (error) {
+        await handleInteractionError(interaction, error, { type: 'lavalink-configuration' });
       }
       return;
     }

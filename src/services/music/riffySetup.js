@@ -6,7 +6,22 @@ import { setupPlayerHandler } from './playerHandler.js';
 
 const { Riffy } = createRequire(import.meta.url)('riffy');
 
-export function initializeMusic(client) {
+export async function initializeMusic(client) {
+  const previousRiffy = client.riffy;
+  if (previousRiffy) {
+    for (const player of previousRiffy.players?.values?.() || []) {
+      try {
+        player.destroy();
+      } catch {
+        // A disconnected player may already be destroyed.
+      }
+    }
+    try {
+      await previousRiffy.destroy?.();
+    } catch (error) {
+      logger.warn('Could not fully close the previous Lavalink client.', { code: error?.code });
+    }
+  }
   client.riffy = null;
 
   if (!lavalinkConfig.nodes.length) {
@@ -36,10 +51,13 @@ export function initializeMusic(client) {
     });
 
     setupPlayerHandler(client);
-    client.on('raw', (packet) => {
-      if (![GatewayDispatchEvents.VoiceStateUpdate, GatewayDispatchEvents.VoiceServerUpdate].includes(packet.t)) return;
-      client.riffy?.updateVoiceState(packet);
-    });
+    if (!client.musicRawPacketListener) {
+      client.musicRawPacketListener = (packet) => {
+        if (![GatewayDispatchEvents.VoiceStateUpdate, GatewayDispatchEvents.VoiceServerUpdate].includes(packet.t)) return;
+        client.riffy?.updateVoiceState(packet);
+      };
+      client.on('raw', client.musicRawPacketListener);
+    }
 
     client.riffy.on('playerError', (player, error) => {
       logger.error('Lavalink playback error.', { guildId: player?.guildId, code: error?.code, name: error?.name });
@@ -52,6 +70,11 @@ export function initializeMusic(client) {
     logger.error('Could not initialize the Lavalink client.', { name: error?.name, code: error?.code });
     return false;
   }
+}
+
+export async function reconnectMusic(client) {
+  if (!await initializeMusic(client)) return false;
+  return initRiffyAfterReady(client);
 }
 
 export async function initRiffyAfterReady(client) {

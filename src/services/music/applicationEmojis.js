@@ -1,14 +1,14 @@
 import { logger } from '../../utils/logger.js';
 
 const emojiIntentTerms = Object.freeze({
-  previous: ['previous', 'prev', 'back', 'rewind'],
+  previous: ['previous', 'prev', 'back', 'rewind', 'music'],
   pause: ['pause'],
-  resume: ['resume', 'play'],
+  resume: ['resume', 'play', 'unmute'],
   skip: ['skip', 'next', 'forward'],
-  stop: ['stop'],
+  stop: ['stop', 'clear', 'bin'],
   loop: ['loop', 'repeat'],
-  shuffle: ['shuffle', 'random'],
-  queue: ['queue', 'list'],
+  shuffle: ['shuffle', 'random', 'automode'],
+  queue: ['queue', 'list', 'music'],
   volume: ['volume', 'audio', 'speaker'],
 });
 
@@ -22,11 +22,11 @@ function mapApplicationEmojis(collection) {
   const entries = [...collection.values()];
   const mapped = new Map();
 
-  for (const [intent, terms] of Object.entries(emojiIntentTerms)) {
+  for (const [index, [intent, terms]] of Object.entries(emojiIntentTerms).entries()) {
     const emoji = entries.find((entry) => {
       const name = normalizeEmojiName(entry.name);
       return terms.some((term) => name.includes(term));
-    });
+    }) || entries[index % Math.max(entries.length, 1)];
     if (emoji) {
       mapped.set(intent, {
         id: emoji.id,
@@ -49,7 +49,14 @@ export async function loadApplicationEmojis(client) {
     try {
       const emojis = await client.application.emojis.fetch();
       const mapped = mapApplicationEmojis(emojis);
-      logger.info(`Loaded ${emojis.size} application emoji(s) for music controls.`);
+      client.musicApplicationEmojiList = [...emojis.values()].map((emoji) => ({
+        id: emoji.id,
+        name: emoji.name,
+        animated: emoji.animated,
+      }));
+      logger.info(`Loaded ${emojis.size} application emoji(s) for music controls.`, {
+        names: client.musicApplicationEmojiList.map((emoji) => emoji.name),
+      });
       return mapped;
     } catch (error) {
       logger.warn('Application emojis are unavailable; music controls will use text labels.', {

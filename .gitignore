@@ -147,3 +147,4 @@ backups/
 
 # Private voice recordings and temporary audio
 /data/recordings/
+data/lavalink.json

@@ -369,7 +369,6 @@ function startSpeakerCapture(session, userId) {
       bytesWritten: 0,
       audioBytes: 0,
       writeQueue: Promise.resolve(),
-      speechEvents: [],
     };
     session.tracks.set(userId, track);
   }
@@ -434,18 +433,6 @@ function startSpeakerCapture(session, userId) {
     if (segment.closed || session.activeStreams.get(userId) !== streamToken) return;
     session.activeStreams.delete(userId);
     segment.closed = true;
-    if (segment.bytes > 0) {
-      const durationMs = segment.bytes / (recordingConfig.sampleRate * 4) * 1_000;
-      const event = {
-        userId,
-        username: participant.username,
-        startAt: segment.startAt,
-        endAt: segment.startAt + durationMs,
-        durationMs,
-      };
-      track.speechEvents.push(event);
-      session.speechTimeline.push(event);
-    }
   };
 
   decoder.once('end', endSegment);
@@ -472,18 +459,6 @@ function stopSpeakerCapture(session, userId) {
   if (!active) return;
   if (active.segment.bytes > 0 && !active.segment.closed) {
     active.segment.closed = true;
-    const participant = session.participants.get(userId);
-    const track = session.tracks.get(userId);
-    const durationMs = active.segment.bytes / (recordingConfig.sampleRate * 4) * 1_000;
-    const event = {
-      userId,
-      username: participant?.username || 'Unknown participant',
-      startAt: active.segment.startAt,
-      endAt: active.segment.startAt + durationMs,
-      durationMs,
-    };
-    track?.speechEvents.push(event);
-    session.speechTimeline.push(event);
   }
   session.activeStreams.delete(userId);
   active.opusStream.unpipe(active.decoder);
@@ -641,12 +616,14 @@ export async function startRecording(client, interaction, title) {
     voiceChannelName: voiceChannel.name,
     recorderId: interaction.user.id,
     recorderName: interaction.user.username,
+    recorderAvatarURL: interaction.user.displayAvatarURL(),
+    botAvatarURL: client.user.displayAvatarURL(),
+    guildIconURL: interaction.guild.iconURL(),
     title: String(title || `Voice recording ${recordingId}`).slice(0, 200),
     status: 'awaiting-consent',
     createdAt: Date.now(),
     participants: new Map(),
     consentEvents: [],
-    speechTimeline: [],
     pauseEvents: [],
     tracks: new Map(),
     activeStreams: new Map(),
@@ -833,13 +810,13 @@ async function convertTracks(session, recordDirectory, durationMs) {
 
 function createReportEmbed(record) {
   const participants = record.participants
-    .map((participant) => `${participant.displayName} (${participant.consentStatus})`)
+    .map((participant) => `<@${participant.userId}>`)
     .slice(0, 20)
     .join('\n') || 'No participants';
-  const speakerTimeline = record.speechTimeline
-    .slice(0, 12)
-    .map((event) => `${event.username}: ${bdt(event.startAt)} — approx. ${displayDuration(event.durationMs)}`)
-    .join('\n') || 'No identified speech segments';
+  const speakers = record.tracks
+    .map((track) => `<@${track.userId}>`)
+    .slice(0, 20)
+    .join('\n') || 'No identified speakers';
   const consentHistory = record.consentEvents
     .slice(-12)
     .map((event) => `${event.username}: ${event.status} at ${bdt(event.at)}`)
@@ -858,16 +835,19 @@ function createReportEmbed(record) {
       { name: 'Duration', value: displayDuration(record.durationMs), inline: true },
       { name: 'Audio metadata', value: `MP3 • ${record.bitrate} • ${record.sampleRate} Hz\nCombined file: ${record.fileSize} bytes\nParticipants: ${record.participants.length}\nIdentified speakers: ${record.speakerCount}`, inline: false },
       { name: 'Individual tracks', value: record.tracks.map((track) => `${track.username}: ${track.size} bytes`).join('\n').slice(0, 1_024) || 'No individual tracks', inline: false },
-      { name: 'Participants', value: participants.slice(0, 1_024), inline: false },
-      { name: 'Participant join and leave times (BDT)', value: record.participants.map((participant) =>
-        `${participant.displayName}: ${participant.joinLeaveEvents.map((event) => `${event.type} ${bdt(event.at)}`).join(', ')}`,
-      ).join('\n').slice(0, 1_024) || 'No join or leave events', inline: false },
-      { name: 'Consent history (BDT)', value: consentHistory.slice(0, 1_024), inline: false },
-      { name: 'Pause and resume history (BDT)', value: pauseHistory.slice(0, 1_024), inline: false },
-      { name: 'Speaker activity (approximate, BDT)', value: speakerTimeline.slice(0, 1_024), inline: false },
+      { name: 'Who was present', value: participants.slice(0, 1_024), inline: false },
+      { name: 'Who spoke', value: speakers.slice(0, 1_024), inline: false },
       { name: 'Delivery and backup', value: `Backup: ${record.backupStatus}\nStorage: private local files`, inline: false },
     )
-    .setFooter({ text: 'All displayed timestamps use Asia/Dhaka (BDT). Speech timing is approximate.' });
+    .setThumbnail(record.guildIconURL || null)
+    .setAuthor({
+      name: record.recorderName.slice(0, 256),
+      ...(record.recorderAvatarURL ? { iconURL: record.recorderAvatarURL } : {}),
+    })
+    .setFooter({
+      text: 'ASTRION',
+      ...(record.botAvatarURL ? { iconURL: record.botAvatarURL } : {}),
+    });
 }
 
 function recordFilePath(record, fileName) {
@@ -1003,7 +983,6 @@ async function persistCompletedRecording(session, reason) {
     speakerCount: exportedTracks.length,
     participants,
     consentEvents: session.consentEvents,
-    speechTimeline: session.speechTimeline,
     pauseEvents: session.pauseEvents,
     privateChannelId: session.privateChannelId,
     backupStatus,

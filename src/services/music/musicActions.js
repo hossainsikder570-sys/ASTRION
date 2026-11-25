@@ -14,6 +14,7 @@ import {
 } from './musicEmbeds.js';
 import { refreshPlayerMessage } from './playerHandler.js';
 import { isRecordingActive } from '../recording/recordingManager.js';
+import { getMusicEmoji } from './applicationEmojis.js';
 
 const PLAYER_CONNECT_TIMEOUT_MS = 12_000;
 
@@ -577,7 +578,7 @@ export function buildNowPlayingReply(client, guildId) {
     }
     const guildData = getGuildMusicData(guildId);
     return {
-        embeds: [buildNowPlayingEmbed(player.current, player, guildData)],
+        embeds: [buildNowPlayingEmbed(player.current, player, guildData, client)],
     };
 }
 
@@ -654,8 +655,12 @@ export async function leaveVoiceChannel(client, interaction) {
 }
 
 export async function replyMusicSuccess(interaction, embed) {
+    const emoji = getMusicEmoji(interaction.client, 'queue');
+    const emojiText = emoji ? `${emoji.animated ? '<a:' : '<:'}${emoji.name}:${emoji.id}>` : '';
     await InteractionHelper.safeReply(interaction, {
+        ...(emojiText ? { content: emojiText } : {}),
         embeds: [embed],
         flags: MessageFlags.Ephemeral,
+        allowedMentions: { parse: [] },
     });
 }

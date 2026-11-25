@@ -41,7 +41,7 @@ class AstrionMusicBot extends Client {
     this.startupStage = 'event-loading';
     await this.loadHandlers();
     this.startupStage = 'music-initialization';
-    initializeMusic(this);
+    await initializeMusic(this);
     this.startupStage = 'discord-login';
     await this.login(token);
     this.startupStage = 'slash-command-registration';
@@ -71,6 +71,7 @@ class AstrionMusicBot extends Client {
       response.end(JSON.stringify({
         status: ready ? 'ready' : 'starting',
         musicConfigured: Boolean(this.riffy),
+        presenceStatus: this.user?.presence?.status || 'unknown',
         commandCount: this.commands.size,
         uptimeSeconds: Math.floor(process.uptime()),
       }));

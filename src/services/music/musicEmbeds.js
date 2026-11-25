@@ -38,7 +38,7 @@ function getLoopLabel(loop) {
   return 'Off';
 }
 
-export function buildNowPlayingEmbed(track, player, guildData) {
+export function buildNowPlayingEmbed(track, player, guildData, client) {
   const requester = track?.info?.requester;
   const requesterLabel = requester?.username || requester?.tag || 'Unknown';
   const duration = track?.info?.length ? formatDuration(track.info.length) : 'Live';
@@ -56,8 +56,15 @@ export function buildNowPlayingEmbed(track, player, guildData) {
       { name: 'Autoplay', value: guildData?.autoplay ? 'On' : 'Off', inline: true },
       { name: 'Queue', value: `${player?.queue?.length || 0} track(s)`, inline: true },
     ],
-    thumbnail: track?.info?.artworkUrl || track?.info?.thumbnail || null,
-    footer: player?.paused ? 'Paused' : 'Playing',
+    author: {
+      name: `Requested by ${requesterLabel}`,
+      ...(requester?.displayAvatarURL ? { iconURL: requester.displayAvatarURL() } : {}),
+    },
+    thumbnail: client?.guilds?.cache?.get(player?.guildId)?.iconURL() || track?.info?.artworkUrl || track?.info?.thumbnail || null,
+    footer: {
+      text: `${player?.paused ? 'Paused' : 'Playing'} • ${client?.user?.username || 'ASTRION'}`,
+      ...(client?.user?.displayAvatarURL ? { iconURL: client.user.displayAvatarURL() } : {}),
+    },
   });
 }
 

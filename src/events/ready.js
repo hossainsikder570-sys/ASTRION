@@ -10,7 +10,7 @@ export default {
   async execute(client) {
     try {
       client.user.setPresence({
-        status: 'online',
+        status: 'dnd',
         activities: [{ name: 'the music queue', type: ActivityType.Listening }],
       });
       await loadApplicationEmojis(client);

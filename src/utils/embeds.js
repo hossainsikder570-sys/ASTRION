@@ -100,12 +100,15 @@ EmbedBuilder.prototype.setDescription = function(description = '') {
 
 EmbedBuilder.prototype.setFooter = function(footer) {
   const footerText = sanitizeEmbedText(normalizeFooterText(footer));
-  if (!footerText || !isImportantFooter(footerText)) {
+  if (!footerText || (!isImportantFooter(footerText) && !footer?.iconURL)) {
     return this;
   }
 
   this[EMBED_FOOTER_SYMBOL] = footerText;
-  return originalSetFooter.call(this, { text: footerText });
+  return originalSetFooter.call(this, {
+    text: footerText,
+    ...(footer?.iconURL ? { iconURL: footer.iconURL } : {}),
+  });
 };
 
 EmbedBuilder.prototype.setTimestamp = function() {
