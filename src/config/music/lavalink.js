@@ -1,85 +1,81 @@
-import { existsSync, readFileSync } from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 
-const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+const settingsPath = path.resolve(process.env.LAVALINK_CONFIG_PATH || 'data/lavalink.json');
 
-function parseBoolean(value, defaultValue = false) {
-    if (value === undefined || value === null || value === '') {
-        return defaultValue;
-    }
-    return ['true', '1', 'yes'].includes(String(value).toLowerCase());
+function readLavalinkSettings(env = process.env) {
+  const requiredNames = ['LAVALINK_HOST', 'LAVALINK_PORT', 'LAVALINK_PASSWORD'];
+  const missing = requiredNames.filter((name) => !String(env[name] || '').trim());
+
+  if (missing.length) {
+    return { nodes: [], configurationError: `Missing required Lavalink settings: ${missing.join(', ')}.` };
+  }
+
+  const port = Number(env.LAVALINK_PORT);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return { nodes: [], configurationError: 'LAVALINK_PORT must be an integer from 1 to 65535.' };
+  }
+
+  const host = String(env.LAVALINK_HOST).trim();
+  if (host.includes('://') || /[/?#\s]/.test(host)) {
+    return { nodes: [], configurationError: 'LAVALINK_HOST must be a hostname or IP address without a protocol or path.' };
+  }
+
+  const secureValue = String(env.LAVALINK_SECURE ?? '').trim().toLowerCase();
+  if (secureValue && !['true', 'false'].includes(secureValue)) {
+    return { nodes: [], configurationError: 'LAVALINK_SECURE must be true or false.' };
+  }
+
+  return {
+    nodes: [{ host, port, password: String(env.LAVALINK_PASSWORD), secure: secureValue === 'true', name: 'Lavalink' }],
+    configurationError: null,
+  };
 }
 
-function parseNodesFromEnv() {
-    const raw = process.env.LAVALINK_NODES?.trim();
-    if (!raw) {
-        return null;
+function getInitialSettings() {
+  try {
+    const saved = JSON.parse(readFileSync(settingsPath, 'utf8'));
+    return readLavalinkSettings({
+      LAVALINK_HOST: saved.host,
+      LAVALINK_PORT: saved.port,
+      LAVALINK_PASSWORD: saved.password,
+      LAVALINK_SECURE: saved.secure ? 'true' : 'false',
+    });
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.error('[ASTRION] Saved Lavalink settings are invalid; using environment settings.');
     }
-
-    try {
-        const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed : null;
-    } catch {
-        return null;
-    }
-}
-
-function parseNodesPayload(parsed) {
-    if (Array.isArray(parsed)) {
-        return parsed;
-    }
-    if (Array.isArray(parsed?.nodes)) {
-        return parsed.nodes;
-    }
-    return null;
-}
-
-function loadNodesFromFile() {
-    const nodesFile = process.env.LAVALINK_NODES_FILE?.trim()
-        || path.join(projectRoot, 'lavalink', 'nodes.json');
-
-    if (!existsSync(nodesFile)) {
-        return null;
-    }
-
-    try {
-        const parsed = JSON.parse(readFileSync(nodesFile, 'utf8'));
-        return parseNodesPayload(parsed);
-    } catch {
-        return null;
-    }
-}
-
-export function getLavalinkNodes() {
-    const fromJson = parseNodesFromEnv();
-    if (fromJson?.length) {
-        return fromJson;
-    }
-
-    const fromFile = loadNodesFromFile();
-    if (fromFile?.length) {
-        return fromFile;
-    }
-
-    const host = process.env.LAVALINK_HOST || 'localhost';
-    const port = Number(process.env.LAVALINK_PORT || 2333);
-    const password = process.env.LAVALINK_PASSWORD || 'youshallnotpass';
-    const secure = parseBoolean(process.env.LAVALINK_SECURE, false);
-
-    return [{
-        host,
-        port,
-        password,
-        secure,
-        name: process.env.LAVALINK_NAME || 'Main',
-    }];
+    return readLavalinkSettings();
+  }
 }
 
 export const lavalinkConfig = {
-    nodes: getLavalinkNodes(),
-    defaultSearchPlatform: process.env.LAVALINK_SEARCH_PLATFORM || 'ytmsearch',
-    restVersion: process.env.LAVALINK_REST_VERSION || 'v4',
+  ...getInitialSettings(),
+  defaultSearchPlatform: 'ytmsearch',
+  restVersion: 'v4',
 };
 
+export function updateLavalinkSettings(settings) {
+  const validated = readLavalinkSettings({
+    LAVALINK_HOST: settings.host,
+    LAVALINK_PORT: settings.port,
+    LAVALINK_PASSWORD: settings.password,
+    LAVALINK_SECURE: String(settings.secure),
+  });
+  if (validated.configurationError) throw new Error(validated.configurationError);
+
+  const [node] = validated.nodes;
+  mkdirSync(path.dirname(settingsPath), { recursive: true, mode: 0o700 });
+  writeFileSync(settingsPath, JSON.stringify({
+    host: node.host,
+    port: node.port,
+    password: node.password,
+    secure: node.secure,
+  }), { mode: 0o600 });
+  chmodSync(settingsPath, 0o600);
+  lavalinkConfig.nodes = validated.nodes;
+  lavalinkConfig.configurationError = null;
+}
+
+export { readLavalinkSettings };
 export default lavalinkConfig;

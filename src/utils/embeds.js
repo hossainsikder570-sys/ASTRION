@@ -3,16 +3,17 @@
 import { EmbedBuilder } from 'discord.js';
 import { getColor, botConfig } from '../config/bot.js';
 
-const EMOJI_REGEX = /[\p{Extended_Pictographic}\uFE0F]/gu;
+const EMOJI_REGEX = /[\p{Extended_Pictographic}\p{Regional_Indicator}\p{Emoji_Modifier}\uFE0F\u20E3]/gu;
 const EMBED_FOOTER_SYMBOL = Symbol('titanbotFooterText');
 const EMBED_BASE_DESCRIPTION_SYMBOL = Symbol('titanbotBaseDescription');
 
-function sanitizeEmbedText(text = '') {
+export function sanitizeEmbedText(text = '') {
   if (typeof text !== 'string') {
     return text;
   }
 
   return text
+    .replace(/<a?:[A-Za-z0-9_~]+:\d+>/g, '')
     .replace(EMOJI_REGEX, '')
     .replace(/[ \t]+/g, ' ')  // Replace consecutive spaces/tabs with single space
     .replace(/[ \t]\n/g, '\n')  // Remove spaces before newlines
@@ -99,12 +100,15 @@ EmbedBuilder.prototype.setDescription = function(description = '') {
 
 EmbedBuilder.prototype.setFooter = function(footer) {
   const footerText = sanitizeEmbedText(normalizeFooterText(footer));
-  if (!footerText || !isImportantFooter(footerText)) {
+  if (!footerText || (!isImportantFooter(footerText) && !footer?.iconURL)) {
     return this;
   }
 
   this[EMBED_FOOTER_SYMBOL] = footerText;
-  return originalSetFooter.call(this, { text: footerText });
+  return originalSetFooter.call(this, {
+    text: footerText,
+    ...(footer?.iconURL ? { iconURL: footer.iconURL } : {}),
+  });
 };
 
 EmbedBuilder.prototype.setTimestamp = function() {

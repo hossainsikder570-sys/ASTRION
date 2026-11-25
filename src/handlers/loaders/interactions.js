@@ -1,75 +1,39 @@
-import { readdir } from 'fs/promises';
-import { join } from 'path';
-import { fileURLToPath, pathToFileURL } from 'url';
-import { dirname } from 'path';
+import { readdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { logger } from '../../utils/logger.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const loaderDirectory = fileURLToPath(new URL('.', import.meta.url));
 
-const interactionTypes = ['buttons', 'selectMenus', 'modals'];
-
-async function getAllInteractionFiles(directory, fileList = []) {
+async function collectButtonFiles(directory, files = []) {
   const entries = await readdir(directory, { withFileTypes: true });
-
   for (const entry of entries) {
     const entryPath = join(directory, entry.name);
-
     if (entry.isDirectory()) {
-      await getAllInteractionFiles(entryPath, fileList);
+      await collectButtonFiles(entryPath, files);
     } else if (entry.name.endsWith('.js')) {
-      fileList.push(entryPath);
+      files.push(entryPath);
     }
   }
-
-  return fileList;
+  return files;
 }
 
-export default async (client) => {
-  try {
-    const interactionsPath = join(__dirname, '../../interactions');
+export default async function loadInteractions(client) {
+  const buttonsDirectory = join(loaderDirectory, '../../interactions/buttons');
+  const files = await collectButtonFiles(buttonsDirectory);
 
-    for (const type of interactionTypes) {
-      const typePath = join(interactionsPath, type);
+  for (const filePath of files) {
+    const loaded = await import(pathToFileURL(filePath).href);
+    const definitions = Array.isArray(loaded.default) ? loaded.default : [loaded.default];
 
-      try {
-        const interactionFiles = await getAllInteractionFiles(typePath);
-        let loadedCount = 0;
-
-        for (const filePath of interactionFiles) {
-          const relativePath = filePath.slice(interactionsPath.length + 1).replace(/\\/g, '/');
-          const fileName = relativePath.split('/').pop();
-
-          try {
-            const module = await import(pathToFileURL(filePath).href);
-            const moduleExport = module.default;
-            const interactions = Array.isArray(moduleExport) ? moduleExport : [moduleExport];
-
-            for (const interaction of interactions) {
-              if (!interaction?.name || !interaction?.execute) {
-                logger.warn(`Interaction ${relativePath} in ${type} is missing required properties.`);
-                continue;
-              }
-
-              client[type].set(interaction.name, interaction);
-              loadedCount += 1;
-              logger.info(`Loaded ${type.slice(0, -1)}: ${interaction.name} (${fileName})`);
-            }
-          } catch (error) {
-            logger.error(`Error loading interaction ${relativePath} in ${type}:`, error);
-          }
-        }
-
-        logger.info(`Loaded ${loadedCount} ${type}`);
-      } catch (error) {
-        if (error.code !== 'ENOENT') {
-          logger.error(`Error loading ${type}:`, error);
-        } else {
-          logger.debug(`No ${type} directory found, skipping...`);
-        }
+    for (const button of definitions) {
+      if (!button?.name || typeof button.execute !== 'function') {
+        logger.warn('Skipped an invalid music button handler.');
+        continue;
       }
+      client.buttons.set(button.name, button);
     }
-  } catch (error) {
-    logger.error('Error loading interactions:', error);
   }
-};
+
+  logger.info(`Loaded ${client.buttons.size} music button handler(s).`);
+}
