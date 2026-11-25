@@ -2,6 +2,8 @@ FROM node:26-alpine
 
 WORKDIR /usr/src/app
 
+RUN apk add --no-cache ffmpeg
+
 ENV NODE_ENV=production
 
 COPY package*.json ./

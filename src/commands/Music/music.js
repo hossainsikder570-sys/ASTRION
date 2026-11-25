@@ -7,6 +7,8 @@ import {
     resumePlayback,
     shuffleQueue,
     setLoopMode,
+    setAutoplay,
+    playPreviousTrack,
     setVolume,
     seekTrack,
     removeFromQueue,
@@ -33,6 +35,9 @@ export default {
             sub.setName('skip').setDescription('Skip the current track'),
         )
         .addSubcommand((sub) =>
+            sub.setName('previous').setDescription('Play the previous track'),
+        )
+        .addSubcommand((sub) =>
             sub.setName('stop').setDescription('Stop playback and clear the queue'),
         )
         .addSubcommand((sub) =>
@@ -52,6 +57,14 @@ export default {
                             { name: 'Track', value: 'track' },
                             { name: 'Queue', value: 'queue' },
                         ),
+                ),
+        )
+        .addSubcommand((sub) =>
+            sub
+                .setName('autoplay')
+                .setDescription('Enable or disable autoplay')
+                .addBooleanOption((opt) =>
+                    opt.setName('enabled').setDescription('Whether autoplay is enabled').setRequired(true),
                 ),
         )
         .addSubcommand((sub) =>
@@ -124,6 +137,11 @@ export default {
                 await replyMusicSuccess(interaction, embed);
                 break;
             }
+            case 'previous': {
+                const embed = await playPreviousTrack(client, interaction);
+                await replyMusicSuccess(interaction, embed);
+                break;
+            }
             case 'stop': {
                 const embed = await stopPlayback(client, interaction);
                 await replyMusicSuccess(interaction, embed);
@@ -136,6 +154,11 @@ export default {
             }
             case 'loop': {
                 const embed = await setLoopMode(client, interaction, interaction.options.getString('mode'));
+                await replyMusicSuccess(interaction, embed);
+                break;
+            }
+            case 'autoplay': {
+                const embed = await setAutoplay(client, interaction, interaction.options.getBoolean('enabled'));
                 await replyMusicSuccess(interaction, embed);
                 break;
             }
