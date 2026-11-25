@@ -1,4 +1,4 @@
-import { Events, MessageFlags, PermissionsBitField } from 'discord.js';
+import { Events, MessageFlags } from 'discord.js';
 import lavalinkConfig, { updateLavalinkSettings } from '../config/music/lavalink.js';
 import { reconnectMusic } from '../services/music/riffySetup.js';
 import { getPlayer, setVolume } from '../services/music/musicActions.js';
@@ -89,12 +89,10 @@ export default {
 
     if (interaction.isModalSubmit() && interaction.customId === 'lavalink_edit_settings') {
       try {
-        const permissions = interaction.memberPermissions;
-        if (!permissions?.has(PermissionsBitField.Flags.ManageGuild) &&
-            !permissions?.has(PermissionsBitField.Flags.Administrator)) {
+        if (!process.env.BOT_OWNER_ID || interaction.user.id !== process.env.BOT_OWNER_ID.trim()) {
           return replyUserError(interaction, {
             type: ErrorTypes.PERMISSION,
-            message: 'Manage Server permission is required to change Lavalink settings.',
+            message: 'Only the configured bot owner can change Lavalink settings.',
           });
         }
 

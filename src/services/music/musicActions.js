@@ -78,10 +78,15 @@ async function waitForPlayerConnection(player) {
     }
 
     if (!player.connected) {
+        try {
+            player.destroy();
+        } catch {
+            // The timed-out voice session may already have been removed.
+        }
         throw new TitanBotError(
             'Voice connection failed',
             ErrorTypes.CONFIGURATION,
-            'Could not connect to the voice channel. Ensure Lavalink is online, the bot has Connect and Speak permissions, then try again.',
+            'Lavalink did not confirm the Discord voice connection within 12 seconds. Run `/lavalink status` (bot owner only) to check the node, and verify the bot has Connect, Speak, and View Channel permissions in that voice channel.',
         );
     }
 }
