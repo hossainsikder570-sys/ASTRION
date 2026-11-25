@@ -1,6 +1,5 @@
 // database.js — facade re-exporting split modules for backward compatibility
 
-import { pgDb } from './postgresDatabase.js';
 import { logger } from './logger.js';
 import { BotConfig, getDefaultApplicationQuestions } from '../config/bot.js';
 
@@ -84,8 +83,11 @@ export async function insertVerificationAudit(record) {
             await db.initialize();
         }
 
-        if (db.isAvailable() && typeof pgDb.insertVerificationAudit === 'function') {
-            return await pgDb.insertVerificationAudit(record);
+        if (db.getConnectionType?.() === 'postgresql') {
+            const { pgDb } = await import('./postgresDatabase.js');
+            if (typeof pgDb.insertVerificationAudit === 'function') {
+                return await pgDb.insertVerificationAudit(record);
+            }
         }
 
         const key = `verification:audit:${record.guildId}`;
@@ -124,8 +126,6 @@ export function unwrapReplitData(data) {
 
 // Guild config access: import from services/config/guildConfig.js only.
 // Low-level storage lives in ./database/guildConfigStorage.js
-
-export { pgDb };
 
 export const getMessage = (key, replacements = {}) => {
     let message = BotConfig.messages[key] || key;

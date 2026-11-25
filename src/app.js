@@ -57,18 +57,9 @@ class TitanBot extends Client {
       const dbInstance = await initializeDatabase();
       this.db = dbInstance.db;
 
-      // Check database status and report
       const dbStatus = this.db.getStatus();
-      if (dbStatus.isDegraded) {
-        logger.warn('');
-        logger.warn('╔═══════════════════════════════════════════════════════╗');
-        logger.warn('║ ⚠️  DATABASE RUNNING IN DEGRADED MODE                 ║');
-        logger.warn('║                                                       ║');
-        logger.warn('║ Connection: In-Memory Storage (PostgreSQL unavailable)║');
-        logger.warn('║ Data Persistence: DISABLED - data lost on restart    ║');
-        logger.warn('║ Action Required: Fix PostgreSQL and restart bot      ║');
-        logger.warn('╚═══════════════════════════════════════════════════════╝');
-        logger.warn('');
+      if (dbStatus.connectionType === 'memory') {
+        startupLog('✅ Database Mode: in-memory (PostgreSQL disabled; data resets on restart)');
       } else {
         startupLog(`✅ Database Status: ${dbStatus.connectionType} (fully operational)`);
       }
@@ -94,8 +85,8 @@ class TitanBot extends Client {
       await this.registerCommands();
       startupLog('Slash commands registration complete');
       
-      const databaseMode = dbStatus.isDegraded
-        ? 'Optional in-memory mode (data resets after restart)'
+      const databaseMode = dbStatus.connectionType === 'memory'
+        ? 'In-memory mode (data resets after restart)'
         : 'Connected (persistent data enabled)';
       const handlerSummary = `${this.buttons.size} buttons, ${this.selectMenus.size} menus, ${this.modals.size} modals`;
       startupLog(
@@ -163,7 +154,9 @@ class TitanBot extends Client {
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
         database: {
-          connected: dbStatus.connectionType !== 'none',
+          connected: dbStatus.connectionType === 'postgresql',
+          available: dbStatus.isAvailable,
+          persistent: dbStatus.isPersistent,
           degraded: dbStatus.isDegraded,
           type: dbStatus.connectionType
         }
@@ -173,13 +166,15 @@ class TitanBot extends Client {
 
     app.get('/ready', (req, res) => {
       const dbStatus = this.db?.getStatus?.() || { isDegraded: true, connectionType: 'none' };
-      const isReady = this.isReady() && !dbStatus.isDegraded;
+      const isReady = this.isReady();
 
       const metrics = {
         guildCount: this.guilds?.cache?.size ?? 0,
         commandCount: this.commands?.size ?? 0,
         database: {
           mode: dbStatus.connectionType,
+          available: dbStatus.isAvailable,
+          persistent: dbStatus.isPersistent,
           degraded: dbStatus.isDegraded,
           degradedReason: dbStatus.degradedReason ?? null,
         },
@@ -197,7 +192,7 @@ class TitanBot extends Client {
 
       res.status(503).json({
         ready: false,
-        reason: !this.isReady() ? 'Bot not Ready' : 'Database degraded',
+        reason: 'Bot not Ready',
         metrics,
       });
     });
